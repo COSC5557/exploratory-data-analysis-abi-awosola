@@ -31,7 +31,7 @@ illustrate the data. Describe any issues you found with the data.
 
 Have a look at two different datasets. Ideally, they should have different
 characteristics so that the results of your analysis will be different. You
-could use, for example, the [Wine Quality dataset]([https://archive-beta.ics.uci.edu/dataset/186/wine+quality](https://archive.ics.uci.edu/dataset/186/wine+quality))
+could use, for example, the [Wine Quality dataset](https://archive.ics.uci.edu/dataset/186/wine+quality)
 (choose the type of wine of your preference) and the
 [Primary Tumor dataset](https://archive.ics.uci.edu/dataset/83/primary+tumor).
 You may also use a dataset of your choice, for example one that's relevant to
