@@ -1,0 +1,444 @@
+---
+title: "COSC 5557: Practical Machine Learning"
+subtitle: "Exploratory Data Analysis- Wine Data"
+echo: FALSE
+author: "Abiodun Awosola"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+## Note: Not all lines of code are displayed.
+
+
+# Loading the Primary Tumor Data
+
+
+```{r, data, message=F, warning=F}
+#Imports Data
+
+wine_data <- read.table("winequality-white.csv", sep = ";",
+                        check.names = TRUE, header=T)
+
+```
+
+# Exploring the Data
+
+
+As a first step, we explore the data and look for simple problems such as constant or duplicated features. This can be done quite efficiently with a package like `DataExplorer` or `skimr` which can be used to create a large number of informative plots.
+
+Below we summarize the most important findings for data cleaning, but we only consider this aspect in a cursory manner:
+
+## Data Attributes
+
+```{r, message=F, warning=F, fig.width=12, fig.height=10}
+library(tidyverse)
+library(knitr)
+
+
+library(xtable)
+#Rotates the table
+wine_data1 <- xtable(t(wine_data))
+
+#First 10 rows of data
+kable(wine_data1[,1:10],
+      caption = "First 10 Rows of White Wine Data")
+
+
+
+wine_data_summary <- xtable(t(summary(wine_data)))
+
+
+kable(wine_data_summary,
+      caption = "Summary of White Wine Data")
+
+```
+
+
+```{r, message=F, warning=F, fig.width=12, fig.height=10}
+
+# Details the data attributes
+ result <- skimr::skim(wine_data)
+ 
+ result[,c(1:3)]
+ 
+```
+
+
+```{r, message=F, warning=F, fig.width=12, fig.height=10}
+DataExplorer::plot_qq(wine_data) # normal distribution check
+ 
+DataExplorer::plot_correlation(wine_data)
+ 
+DataExplorer::plot_density(wine_data)
+
+```
+
+
+
+The next thing is to clean up the data by fixing those anomalies.
+
+## Data Cleaning
+
+Not deemed needed.
+
+
+```{r, warning=F}
+library(mlr3verse)
+tsk_wine_alc = as_task_regr(wine_data, target = "alcohol", 
+id = "White Wine Alcohol Content")
+
+tsk_wine_alc
+```
+
+
+
+
+```{r, warning=F, message=F, echo=F, fig.width=15, fig.height=15}
+
+library(mlr3viz)
+autoplot(tsk_wine_alc, type = "pairs")
+```
+
+### * Frequency Distribution of the Variable Levels
+### Task Mutators
+
+Used when some variables need be dropped.
+
+```{r, warning=F, echo=F}
+#tsk_mtcars_small = tsk("mtcars") # initialize with the full task
+#tsk_mtcars_small$select("cyl") # keep only one feature
+#tsk_mtcars_small$filter(2:3) # keep only these rows
+#tsk_mtcars_small$data()
+
+
+# feature_names and target_names
+knitr::kable(c(Features = tsk_wine_alc$feature_names,
+  Target = tsk_wine_alc$target_names))
+
+```
+
+
+## Training
+
+In the simplest use case, models are trained by passing a task to a learner with the `$train()` method:
+
+
+
+```{r, echo=F}
+
+# load white wine alcohol task
+tsk_wine_alc = as_task_regr(wine_data, target = "alcohol", id = "White Wine Alcohol Content")
+
+# load a regression tree
+lrn_rpart = lrn("regr.rpart")
+
+# pass the task to the learner via $train()
+lrn_rpart$train(tsk_wine_alc)
+
+
+```
+
+
+After training, the fitted model is stored in the `$model` field for future inspection and prediction:
+
+```{r, warning=F, include=F}
+
+# inspects the trained model
+lrn_rpart$model
+
+```
+## Partitioning Data
+
+When assessing the quality of a model’s predictions, one will likely want to partition the dataset to get a fair and unbiased estimate of a model’s generalization error.
+
+
+```{r, warning=FALSE, message=F, echo=F}
+splits = partition(tsk_wine_alc)
+
+#splits
+```
+
+
+When training we will tell the model to only use the training data by passing the row IDs from `partition` to the `row_ids` argument of `$train()`:
+
+```{r, warning=FALSE, message=F}
+
+lrn_rpart$train(tsk_wine_alc, row_ids = splits$train)
+```
+
+
+## Predicting
+
+Predicting from trained models is as simple as passing your data as a Task to the `$predict()` method of the trained Learner.
+
+Carrying straight on from our last example, we will call the `$predict()` method of our trained learner and again will use the `row_ids` argument, but this time to pass the IDs of our test set:
+
+```{r, warning=F, echo=F}
+
+prediction = lrn_rpart$predict(tsk_wine_alc, row_ids = splits$test)
+
+```
+
+
+The `$predict()` method returns an object inheriting from `Prediction`, in this case `PredictionRegr` as this is a regression task.
+
+```{r, warning=F, include=F}
+
+
+prediction
+```
+
+Similarly to plotting `Tasks`, `mlr3viz` provides an `autoplot()` method for `Prediction` objects.
+
+```{r, warning=F, echo=F}
+
+library(mlr3viz)
+prediction = lrn_rpart$predict(tsk_wine_alc, splits$test)
+autoplot(prediction)
+```
+
+## Changing the Prediction Type
+
+While predicting a single numeric quantity is the most common prediction type in regression, it is not the only prediction type. Several regression models can also predict standard errors. To predict this, the `$predict_type` field of a `LearnerRegr` must be changed from “response” (the default) to `"se"` before training. The `"rpart"` learner we used above does not support predicting standard errors, so in the example below we will use a linear regression model (`lrn("regr.lm")`).
+
+```{r, echo=T}
+library(mlr3learners)
+lrn_lm = lrn("regr.lm", predict_type = "se")
+lrn_lm$train(tsk_wine_alc, splits$train)
+lrn_lm$predict(tsk_wine_alc, splits$test)
+```
+## Evaluation
+
+Perhaps the most important step of the applied machine learning workflow is evaluating model performance. Without this, we would have no way to know if our trained model makes very accurate predictions, is worse than randomly guessing, or somewhere in between. We will continue with our decision tree example to establish if the quality of our predictions is ‘good’, first we will rerun the above code so it is easier to follow along.
+
+```{r, warning=FALSE, fig.height = 11, fig.width = 7, echo=T}
+lrn_rpart = lrn("regr.rpart")
+tsk_wine_alc = as_task_regr(wine_data, target = "alcohol", 
+id = "White Wine Alcohol Content")
+splits = partition(tsk_wine_alc)
+lrn_rpart$train(tsk_wine_alc, splits$train)
+prediction = lrn_rpart$predict(tsk_wine_alc, splits$test)
+```
+
+## Measures
+
+The quality of predictions is evaluated using measures that compare them to the ground truth data for supervised learning tasks. Similarly to Tasks and Learners, the available measures in `mlr3` are stored in a dictionary called `mlr_measures` and can be accessed with `msr()`:
+
+```{r, echo=F}
+
+# as.data.table(msr())
+
+measure = msr("regr.mae")
+measure
+
+
+
+```
+This measure compares the absolute difference (‘error’) between true and predicted values: 
+Lower values are considered better (`Minimize: TRUE`), which is intuitive as we would like the true values, to be identical (or as close as possible) in value to the predicted values. We can see that the range of possible values the learner can take is from (`Range: [0, Inf]`), it has no special properties (`Properties:-`), it evaluates `response` type predictions for regression models (`Predict type: response`), and it has no control parameters (`Parameters: list()`).
+
+Now let us see how to use this measure for scoring our predictions.
+
+## Scoring Predictions
+
+Usually, supervised learning measures compare the difference between predicted values and the ground truth. `mlr3` simplifies the process of bringing these quantities together by storing the predictions and true outcomes in the `Prediction` object as we have already seen.
+
+
+```{r, warning=FALSE, echo=T}
+prediction
+```
+
+
+To calculate model performance, we simply call the `$score()` method of a Prediction object and pass as a single argument the measure that we want to compute:
+
+
+```{r, warning=F, echo=F}
+
+prediction$score(measure)
+
+```
+
+
+Note that all task types have default measures that are used if the argument to `$score()` is omitted, for regression this is the mean squared error (`msr("regr.mse")`), which is the squared difference between true and predicted values averaged over the test set.
+
+
+It is possible to calculate multiple measures at the same time by passing multiple measures to `$score()`. For example, below we compute performance for mean squared error (`"regr.mse"`) and mean absolute error (`"regr.mae"`) – note we use `msrs()` to load multiple measures at once.
+
+
+```{r}
+
+measures = msrs(c("regr.mse", "regr.mae"))
+prediction$score(measures)
+
+
+
+```
+
+
+
+## Technical Measures
+
+This section covers advanced ML or technical details.
+`mlr3` also provides measures that do not quantify the quality of the predictions of a model, but instead provide ‘meta’-information about the model. These include:
+
+`msr("time_train")` – The time taken to train a model.
+`msr("time_predict")` – The time taken for the model to make predictions.
+`msr("time_both")` – The total time taken to train the model and then make predictions.
+`msr("selected_features")` – The number of features selected by a model, which can only be used if the model has the “selected_features” property.
+
+For example, we could score our decision tree to see how many seconds it took to train the model and make predictions:
+
+
+```{r}
+
+measures = msrs(c("time_train", "time_predict", "time_both"))
+prediction$score(measures, learner = lrn_rpart)
+
+
+```
+
+
+
+Notice a few key properties of these measures:
+
+1. `time_both` is simply the sum of `time_train` and `time_predict`.
+
+2. We had to pass `learner = lrn_rpart` to `$score()` as these measures have the `requires_learner` property:
+
+The `selected_features` measure calculates how many features were used in the fitted model.
+
+
+## Filter Data
+
+```{r}
+tsk_wine_alc = as_task_regr(wine_data, target = "alcohol", 
+id = "White Wine Alcohol Content")
+tsk_wine_alc$select(c("citric.acid", "fixed.acidity", "pH", "sulphates", 
+"total.sulfur.dioxide", "volatile.acidity")) # keeps only these features
+
+# retrieve all data
+tsk_wine_alc$data()
+
+tsk_wine_alc2 <- tsk_wine_alc
+```
+
+Used when some variables need be dropped.
+
+```{r, warning=F, echo=F}
+#tsk_mtcars_small = tsk("mtcars") # initialize with the full task
+#tsk_mtcars_small$select("cyl") # keep only one feature
+#tsk_mtcars_small$filter(2:3) # keep only these rows
+#tsk_mtcars_small$data()
+
+
+# feature_names and target_names
+knitr::kable(c(Features = tsk_wine_alc2$feature_names,
+  Target = tsk_wine_alc2$target_names))
+
+```
+
+```{r, echo=F}
+
+# load white wine alcohol task
+#tsk_wine_alc = as_task_regr(wine_data, target = "alcohol", id = "White Wine Alcohol Content")
+
+# load a regression tree
+lrn_rpart = lrn("regr.rpart")
+
+# pass the task to the learner via $train()
+lrn_rpart$train(tsk_wine_alc2)
+
+
+```
+
+
+
+
+```{r, warning=F, include=F}
+
+# inspects the trained model
+lrn_rpart$model
+
+```
+
+
+```{r, warning=FALSE, message=F, echo=F}
+splits = partition(tsk_wine_alc2)
+
+#splits
+```
+
+```{r, warning=FALSE, message=F}
+
+lrn_rpart$train(tsk_wine_alc2, row_ids = splits$train)
+```
+
+
+```{r, warning=F, echo=F}
+
+prediction2 = lrn_rpart$predict(tsk_wine_alc2, row_ids = splits$test)
+
+```
+
+
+
+
+```{r, warning=F, include=F}
+
+
+prediction2
+```
+
+
+
+```{r, warning=F, echo=F}
+
+library(mlr3viz)
+prediction2 = lrn_rpart$predict(tsk_wine_alc2, splits$test)
+autoplot(prediction2)
+```
+
+
+```{r, echo=T}
+library(mlr3learners)
+lrn_lm = lrn("regr.lm", predict_type = "se")
+lrn_lm$train(tsk_wine_alc2, splits$train)
+
+lrn_lm$predict(tsk_wine_alc2, splits$test)
+```
+
+```{r, warning=F, echo=F}
+
+prediction2$score(measure)
+
+```
+```{r}
+
+measures = msrs(c("regr.mse", "regr.mae"))
+prediction2$score(measures)
+
+
+
+```
+
+Since a lower MAE indicates superior model accuracy, the model that used all the features is better.
+
+
+```{r}
+
+measures = msrs(c("time_train", "time_predict", "time_both"))
+prediction2$score(measures, learner = lrn_rpart)
+
+
+```
+
+
+```{r}
+
+measures = msrs(c("regr.mse", "regr.mae"))
+
+cbind(c("Model 1", prediction$score(measures)), c("Model 2", prediction2$score(measures)))
+
+```

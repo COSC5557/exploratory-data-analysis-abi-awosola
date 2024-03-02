@@ -1,0 +1,301 @@
+---
+title: "COSC 5557: Practical Machine Learning"
+subtitle: "Exploratory Data Analysis- Primary Tumor Data"
+author: "Abiodun Awosola"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+## Note: Not all lines of code are displayed.
+
+
+# Loading the Primary Tumor Data
+
+
+```{r, data, warning=F, message=F, echo=T}
+
+knitr::opts_chunk$set(comment = NA) # removes '##' from outputs
+
+#Imports Data
+
+tumor_dat1 <- read.csv(
+  
+  "primary-tumor.data", sep = ",",  check.names = TRUE, header=F,
+  col.names=c("class", "age", "sex", "histologic-type", "degree-of-diffe", "bone",
+"bone-marrow", "lung", "pleura", "peritoneum", "liver",
+"brain", "skin", "neck", "supraclavicular", "axillar", "mediastinum", "abdominal") )
+
+```
+
+
+# Exploring the Data
+
+
+As a first step, we explore the data and look for simple problems such as constant or duplicated features. This can be done quite efficiently with a package like `DataExplorer` or `skimr` which can be used to create a large number of informative plots.
+
+Below we summarize the most important findings for data cleaning, but we only consider this aspect in a cursory manner:
+
+## Data Attributes
+
+```{r, warning=F, echo=F}
+
+tumor_dat1[tumor_dat1 == "?"] <- NA
+# Needed for 'skimr()' to work
+Sys.setlocale('LC_ALL', 'C') 
+
+# Details the data attributes
+ result <- skimr::skim(tumor_dat1)
+ 
+ result[,c(1:3)]
+ 
+ 
+```
+For this data, all the variables are categorical, and so they are expected to be character data type and in levels. They are already in levels. However, not all the variables are character data type, as seen from the output from skimming the data. There are also missing values.
+
+The next thing is to clean up the data by fixing those anomalies.
+
+## Data Cleaning
+
+
+
+
+```{r, warning=F}
+
+```
+
+
+
+
+```{r, warning=F, echo=F}
+
+
+nas <- is.na(tumor_dat1) # Grabs the NA's
+
+
+# imputes highest occuring values for unknown
+
+tumor_dat1$sex[is.na(tumor_dat1$sex)] <- 2
+
+ tumor_dat1$histologic.type[is.na(tumor_dat1$histologic.type)] <- 3
+ 
+ tumor_dat1$degree.of.diffe[is.na(tumor_dat1$degree.of.diffe)] <- 3
+
+tumor_dat1$skin[is.na(tumor_dat1$skin)] <- 2
+
+tumor_dat1$axillar[is.na(tumor_dat1$axillar)] <- 2
+
+
+
+library(xtable)
+#Rotates the table
+tumor_dat <- xtable(t(tumor_dat1))
+library(knitr)
+library(kableExtra)
+kable(tumor_dat[, 1:15], booktabs=T) %>%
+kable_styling(latex_options="scale_down") %>%
+footnote(general = "Table 1: First 15 Rows of the Tumor Data", general_title = "")
+
+```
+
+### * Frequency Distribution of the Variable Levels
+
+```{r, warning=F, echo=F}
+
+# Plots detailing the data frequency distribution
+
+DataExplorer::plot_bar(tumor_dat1[,-1]) # first column excluded
+DataExplorer::plot_histogram(tumor_dat1$class) # only first column (class column)
+
+#DataExplorer::create_report(tumor_dat1)
+
+DataExplorer::plot_density(tumor_dat1)
+
+```
+
+
+## One-Hot Encoding
+
+These categorical variables can't be use as is in a mathematical equation. They could be have converted or encode to numbers so they could be used an algorithms.The factor function in R could be used to do this.
+
+
+
+
+```{r, echo=F}
+
+
+encoded_data2 <- tumor_dat1[,1]
+
+encoded_data <- DataExplorer::dummify(tumor_dat1[,-1]) # hot encoding without column 'class'
+
+encoded_data$class <- tumor_dat1$class  # adds column 'class'
+
+
+```
+
+
+## Splitting the Model
+
+The data set split into two sets which are `training` set and the `test` set. This step is necessary, as in order to evaluate the performance of the machine learning model, a separate data set from the training set is needed.
+
+```{r, warning=F, include=F}
+
+library(mlr3)
+tsk_tumor = as_task_classif(encoded_data, target = "class")
+split = partition(tsk_tumor)
+learner = lrn("classif.rpart")
+
+learner$train(tsk_tumor, row_ids = split$train)
+
+learner$model
+
+```
+
+```{r, warning=FALSE, message=F, echo=F}
+tsk_tumor = as_task_classif(encoded_data, target = "class")
+tsk_tumor
+
+
+c(tsk_tumor$nrow, tsk_tumor$ncol) # Specifies numbers of columns and rows
+
+```
+
+
+
+```{r, warning=FALSE, message=F, fig.height = 18, fig.width = 18, echo=T}
+
+features <- c(Features = tsk_tumor$feature_names,
+  Target = tsk_tumor$target_names)
+
+library(knitr)
+kable(features, caption = "Features and Target")
+
+tail(tsk_tumor$row_ids)  # last 6 rows ID
+
+library(xtable)
+
+# retrieves all data
+ln1 <- xtable(t(head(tsk_tumor$data(), 18)))
+
+kable(ln1, caption = "Preprocessed Data")
+```
+
+
+```{r, warning=F, echo=F}
+
+
+
+library(xtable)
+
+# retrieves data for rows with IDs 1-10 and all feature columns with 
+#target appearing last
+ln2 <- xtable(t(tsk_tumor$data(rows = c(1:10), 
+cols = c(tsk_tumor$feature_names, tsk_tumor$target_names))))
+
+# kable(ln2)
+
+kable(xtable(t(summary(as.data.table(tsk_tumor)))), caption = "Preprocessed Data Distribution")
+
+```
+
+
+
+```{r, warning=F, include=F}
+
+
+# load a classification tree
+
+lrn_rpart <- lrn("classif.rpart",  maxdepth = 30) # information on the metadata 
+#("regr.rpart" for regression model)
+
+# passes the task to the learner via $train()
+lrn_rpart$train(tsk_tumor)
+
+# inspects the trained model
+lrn_rpart$model
+```
+
+
+
+```{r, warning=F, echo=F}
+
+#set.seed(154)  #partition() affects prediction accuracy and keeps changing
+split = partition(tsk_tumor) # what data is the output, by row_ids(YES)
+
+#When training model, only the training data by from 
+#the partition is used selected by row IDs
+
+lrn_rpart$train(tsk_tumor, row_ids = split$train)
+```
+
+
+
+```{r, echo=T}
+#Makes prediction on new data
+library(ggplot2)
+library(knitr)
+
+prediction = lrn_rpart$predict(tsk_tumor, row_ids = split$test)
+
+prediction
+
+prediction$response[1:8]
+```
+
+
+```{r, warning=FALSE, fig.height = 11, fig.width = 7, echo=T}
+# 'maxdepth = 13' predicts 100% of feature 6  
+library(ggplot2)
+library(mlr3viz)
+prediction = lrn_rpart$predict(tsk_tumor, split$test) 
+autoplot(prediction, type = "stacked", theme = theme_grey()) +
+  scale_fill_manual(values = c("gray", "green", "red", "skyblue", "lightgreen", "orange", "pink", "brown", "magenta", "gold", "cyan", "violet", "navy","blue" ,"maroon" , "lightblue", "purple", "white"), name = "Target") + # Modify colors as needed
+
+  labs(x = "Target", y = "Count")  # Set x-axis and y-axis labels
+```
+
+## Measures
+
+This is to measure the performance of the implemented machine learning code.
+
+```{r, echo=F}
+lrn_rpart = lrn("classif.rpart")
+tsk_tumor = as_task_classif(encoded_data, target = "class")
+splits = partition(tsk_tumor)
+lrn_rpart$train(tsk_tumor, splits$train)
+prediction = lrn_rpart$predict(tsk_tumor, splits$test)
+
+```
+
+
+
+
+
+```{r, warning=FALSE, echo=T}
+
+library(mlr3)
+set.seed(544)
+# load and partition our task
+tsk_tumor = as_task_classif(encoded_data, target = "class")
+splits = partition(tsk_tumor)
+# load featureless learner
+lrn_featureless = lrn("classif.featureless")
+# load decision tree and set hyperparameters
+lrn_rpart = lrn("classif.rpart", cp = 0.2, maxdepth = 5)
+# load accuracy measure
+
+measure = msr("classif.acc")
+# train learners
+lrn_featureless$train(tsk_tumor, splits$train)
+lrn_rpart$train(tsk_tumor, splits$train)
+# make and score predictions
+lrn_featureless$predict(tsk_tumor, splits$test)$score(measure)
+
+```
+
+
+```{r, warning=F, echo=F}
+
+
+```
